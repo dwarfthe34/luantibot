@@ -5,14 +5,14 @@ use tracing::info;
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init(); // RUST_LOG=info or debug
 
-    let mut bot = Bot::connect(BotConfig::new("localhost:30000", "mybot", "")).await?;
+    let mut bot = Bot::connect(BotConfig::new("84.247.132.141:40001", "dwarfbot", "p")).await?;
     info!("Connected and authenticated");
 
     while let Some(event) = bot.next_event().await {
         match event {
             Event::Joined => {
                 info!("Joined the server");
-                bot.send_chat("Hello! I am a bot.").await?;
+                bot.send_chat("test test test test test").await?;
             }
 
             Event::Chat { sender, text } => {

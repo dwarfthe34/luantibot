@@ -1,36 +1,28 @@
 //! Network layer: wraps mt_rudp + mt_net + mt_auth into a typed event stream.
 //!
-//! ## How it works
-//!
-//! 1. `mt_net::connect()` (re-exported from mt_rudp via conn.rs) gives us
-//!    `(CltSender, CltReceiver, CltWorker)`.
-//! 2. `CltWorker::run()` is spawned as its own task — the UDP pump.
-//! 3. `mt_auth::Auth` owns the SRP handshake state machine. We drive it with
-//!    `auth.poll()` (re-sends Init until Hello) and `auth.handle_pkt()`.
-//! 4. `CltReceiver` implements `ReceiverExt`, so `.recv().await` directly
-//!    yields `Option<Result<ToCltPkt, RecvError>>` — no manual deserialize.
-//! 5. After `AcceptAuth`, auth sends `Init2` itself; we then send `CltReady`.
+//! - `mt_net::connect()` → `(CltSender, CltReceiver, CltWorker)`
+//! - Worker is spawned as its own task (UDP pump)
+//! - `mt_auth::Auth` drives the SRP handshake via poll() + handle_pkt()
+//! - `ReceiverExt::recv()` deserializes raw RUDP directly into `ToCltPkt`
+//! - After AcceptAuth, auth sends Init2; we send CltReady and emit Joined
 
 use mt_auth::Auth;
 use mt_net::{
-    connect, CltReceiver, CltSender, ReceiverExt, SenderExt, ToCltPkt, ToSrvPkt,
+    connect, CltReceiver, CltSender, KickReason, ReceiverExt, SenderExt, ToCltPkt, ToSrvPkt,
 };
 use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 
-use crate::{config::BotConfig, error::BotError, event::Event};
+use crate::{config::Config, error::BotError, event::Event};
 
-/// Returned by [`connect_bot`]. Holds the sender so `Bot` can issue actions.
 pub struct NetHandle {
-    pub tx: CltSender,
+    pub tx:       CltSender,
     pub event_rx: mpsc::Receiver<Event>,
 }
 
-/// Connect to the server and start the background tasks.
-pub async fn connect_bot(cfg: BotConfig) -> Result<NetHandle, BotError> {
+pub async fn connect_bot(cfg: Config) -> Result<NetHandle, BotError> {
     let (tx, rx, worker) = connect(&cfg.address).await?;
 
-    // RUDP worker must run for the lifetime of the connection
     tokio::spawn(async move {
         worker.run().await;
     });
@@ -49,7 +41,6 @@ pub async fn connect_bot(cfg: BotConfig) -> Result<NetHandle, BotError> {
     Ok(NetHandle { tx, event_rx })
 }
 
-/// Background task: drives auth + translates ToCltPkt -> Events.
 async fn recv_loop(
     mut rx: CltReceiver,
     tx: CltSender,
@@ -58,10 +49,8 @@ async fn recv_loop(
 ) {
     loop {
         tokio::select! {
-            // Re-sends Init on a 100ms timer until Hello arrives
             _ = auth.poll() => {}
 
-            // ReceiverExt::recv() deserializes directly into ToCltPkt
             pkt = rx.recv() => {
                 match pkt {
                     None => {
@@ -81,31 +70,28 @@ async fn recv_loop(
     }
 }
 
-/// Dispatch one ToCltPkt: feed auth first, then translate to Event.
 async fn handle_pkt(
     pkt: ToCltPkt,
     tx: &CltSender,
     auth: &mut Auth,
     event_tx: &mpsc::Sender<Event>,
 ) {
-    // Auth sees every packet — handles Hello, SrpBytesSaltB, AcceptAuth
     auth.handle_pkt(&pkt).await;
 
     match pkt {
-        // Auth
         ToCltPkt::AcceptAuth { .. } => {
-            // auth.handle_pkt already sent Init2; now send CltReady
             info!("Auth accepted — sending CltReady");
             if let Err(e) = tx
                 .send(&ToSrvPkt::CltReady {
-                    major: 5,
-                    minor: 7,
-                    patch: 0,
+                    major:    5,
+                    minor:    7,
+                    patch:    0,
                     reserved: 0,
-                    version: "luanti_bot 0.1.0".into(),
+                    version:  "luanti_bot 0.1.0".into(),
                     formspec: 4,
                 })
                 .await
+                .map(|_| ())
             {
                 warn!("CltReady send failed: {e}");
             }
@@ -113,9 +99,8 @@ async fn handle_pkt(
         }
 
         ToCltPkt::Kick(reason) => {
-            use mt_net::KickReason;
             let msg = match reason {
-                KickReason::Custom { msg } => msg,
+                KickReason::Custom { custom } => custom,
                 other => format!("{other:?}"),
             };
             warn!("Kicked: {msg}");
@@ -127,11 +112,12 @@ async fn handle_pkt(
             let _ = event_tx.send(Event::Kicked(reason)).await;
         }
 
-        // Game
         ToCltPkt::ChatMsg { sender, text, .. } => {
             let _ = event_tx.send(Event::Chat { sender, text }).await;
         }
 
+        // pos/pitch/yaw here are mt_net's cgmath 0.17 types, which match
+        // our Event definition since event.rs also uses mt_net's re-exports
         ToCltPkt::MovePlayer { pos, pitch, yaw } => {
             let _ = event_tx.send(Event::MovePlayer { pos, pitch, yaw }).await;
         }
@@ -148,12 +134,11 @@ async fn handle_pkt(
             let _ = event_tx.send(Event::TimeOfDay { time, speed }).await;
         }
 
-        // Must ack block data or server stops sending chunks
+        // Must ACK or server stops sending map data
         ToCltPkt::BlockData { pos, .. } => {
-            let _ = tx.send(&ToSrvPkt::GotBlocks { blocks: vec![pos] }).await;
+            let _ = tx.send(&ToSrvPkt::GotBlocks { blocks: vec![pos] }).await.map(|_| ());
         }
 
-        // Everything else (media, node defs, HUD, particles, sky...) ignored
         _ => {}
     }
 }

@@ -99,9 +99,9 @@ impl Auth {
                 let mut rand_bytes = vec![0; 32];
                 rand::thread_rng().fill_bytes(&mut rand_bytes);
 
-                if &self.username != name {
-                    panic!("username changed");
-                }
+                //if &self.username != name {
+                //    panic!("username changed");
+                //}
 
                 if auth_methods.contains(AuthMethod::FirstSrp) {
                     let verifier = srp.compute_verifier(

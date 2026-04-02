@@ -1,12 +1,12 @@
-use cgmath::{Deg, Point3};
+// Use cgmath types from mt_net to avoid version mismatch
+use mt_net::{Deg, Point3};
 
-/// Live game state updated as events arrive.
 #[derive(Debug, Clone)]
 pub struct BotState {
-    pub pos:   Point3<f32>,
-    pub pitch: Deg<f32>,
-    pub yaw:   Deg<f32>,
-    pub hp:    u16,
+    pub pos:    Point3<f32>,
+    pub pitch:  Deg<f32>,
+    pub yaw:    Deg<f32>,
+    pub hp:     u16,
     pub joined: bool,
 }
 

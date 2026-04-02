@@ -1,6 +1,6 @@
 #![feature(iterator_try_collect)]
 
-use luanti_bot::{Bot, BotConfig, Event};
+use luanti_bot::{Bot, Config, Event};
 use std::time::Duration;
 use tokio::time::interval;
 use tracing::info;
@@ -14,11 +14,10 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
 
-    // Config — pass args: <address> <username> <password>
-    let cfg = BotConfig {
-        address:  std::env::args().nth(1).unwrap_or_else(|| "localhost:30000".into()),
-        username: std::env::args().nth(2).unwrap_or_else(|| "bot".into()),
-        password: std::env::args().nth(3).unwrap_or_else(|| "".into()),
+    let cfg = Config {
+        address:  std::env::args().nth(1).unwrap_or_else(|| "84.247.132.141:40001".into()),
+        username: std::env::args().nth(2).unwrap_or_else(|| "dwarfbot".into()),
+        password: std::env::args().nth(3).unwrap_or_else(|| "p".into()),
         lang:     "en".into(),
     };
 
@@ -26,7 +25,6 @@ async fn main() -> anyhow::Result<()> {
     let mut bot = Bot::connect(cfg).await?;
     info!("Connected — waiting for events");
 
-    // Position keepalive ticker (server expects PlayerPos ~every 100ms)
     let mut pos_tick = interval(Duration::from_millis(100));
 
     loop {
@@ -56,11 +54,8 @@ async fn main() -> anyhow::Result<()> {
                         handle_chat(&mut bot, &sender, &text).await?;
                     }
 
-                    Some(Event::MovePlayer { pos, pitch, yaw }) => {
-                        info!(
-                            "Server moved us to ({:.1}, {:.1}, {:.1})",
-                            pos.x, pos.y, pos.z
-                        );
+                    Some(Event::MovePlayer { pos, .. }) => {
+                        info!("Server moved us to ({:.1}, {:.1}, {:.1})", pos.x, pos.y, pos.z);
                     }
 
                     Some(Event::Hp { hp }) => {
@@ -74,9 +69,9 @@ async fn main() -> anyhow::Result<()> {
                     Some(Event::PlayerList { update_type, players }) => {
                         use mt_net::PlayerListUpdateType;
                         match update_type {
-                            PlayerListUpdateType::Add    => { for p in &players { info!("+ {p} joined"); } }
-                            PlayerListUpdateType::Remove => { for p in &players { info!("- {p} left");   } }
-                            PlayerListUpdateType::Init   => { info!("Players online: {players:?}"); }
+                            PlayerListUpdateType::Add    => for p in &players { info!("+ {p} joined"); },
+                            PlayerListUpdateType::Remove => for p in &players { info!("- {p} left");   },
+                            PlayerListUpdateType::Init   => info!("Players online: {players:?}"),
                         }
                     }
 
@@ -93,8 +88,6 @@ async fn main() -> anyhow::Result<()> {
                         info!("Disconnected");
                         break;
                     }
-
-                    Some(_) => {}
                 }
             }
         }
