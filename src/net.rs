@@ -8,7 +8,7 @@ use tracing::{debug, info, warn};
 use crate::{config::Config, error::BotError, event::Event};
 
 pub struct NetHandle {
-    pub tx:       CltSender,
+    pub tx: CltSender,
     pub event_rx: mpsc::Receiver<Event>,
 }
 
@@ -75,11 +75,11 @@ async fn handle_pkt(
             info!("Auth accepted — sending CltReady");
             if let Err(e) = tx
                 .send(&ToSrvPkt::CltReady {
-                    major:    5,
-                    minor:    7,
-                    patch:    0,
+                    major: 5,
+                    minor: 7,
+                    patch: 0,
                     reserved: 0,
-                    version:  "luanti_bot 0.1.0".into(),
+                    version: "luanti_bot 0.1.0".into(),
                     formspec: 4,
                 })
                 .await
@@ -135,7 +135,6 @@ async fn handle_pkt(
             let _ = event_tx.send(Event::TimeOfDay { time, speed }).await;
         }
 
-        // Forward server movement params so the bot can calibrate physics
         ToCltPkt::Movement {
             walk_speed,
             jump_speed,
@@ -150,9 +149,11 @@ async fn handle_pkt(
         }
 
         ToCltPkt::AnnounceMedia { .. } => {
-            // Tell the server we don't need any media — without this it won't send game packets
-            debug!("AnnounceMedia — sending empty RequestMedia");
+            info!("AnnounceMedia received — ignoring media completely");
+
+            // Send an empty RequestMedia so the server is happy
             let _ = tx.send(&ToSrvPkt::RequestMedia { filenames: vec![] }).await.map(|_| ());
+            info!("Sent empty RequestMedia (ignoring all media)");
         }
 
         ToCltPkt::BlockData { pos, .. } => {
