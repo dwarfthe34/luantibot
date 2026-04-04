@@ -8,7 +8,7 @@ use tracing::{debug, info, warn};
 use crate::{config::Config, error::BotError, event::Event};
 
 pub struct NetHandle {
-    pub tx: CltSender,
+    pub tx:       CltSender,
     pub event_rx: mpsc::Receiver<Event>,
 }
 
@@ -62,6 +62,21 @@ async fn recv_loop(
     }
 }
 
+async fn respawn(tx: &CltSender) {
+    // Method 1: InvFields with quit=true (how the real client clicks "Respawn" button)
+    let mut fields = std::collections::HashMap::new();
+    fields.insert("quit".to_string(), "true".to_string());
+    let _ = tx.send(&ToSrvPkt::InvFields {
+        formname: "__builtin:death".to_string(),
+        fields,
+    }).await.map(|_| ());
+
+    // Method 2: legacy Respawn packet
+    let _ = tx.send(&ToSrvPkt::Respawn).await.map(|_| ());
+
+    info!("Respawning");
+}
+
 async fn handle_pkt(
     pkt: ToCltPkt,
     tx: &CltSender,
@@ -75,11 +90,11 @@ async fn handle_pkt(
             info!("Auth accepted — sending CltReady");
             if let Err(e) = tx
                 .send(&ToSrvPkt::CltReady {
-                    major: 5,
-                    minor: 7,
-                    patch: 0,
+                    major:    5,
+                    minor:    7,
+                    patch:    0,
                     reserved: 0,
-                    version: "luanti_bot 0.1.0".into(),
+                    version:  "luanti_bot 0.1.0".into(),
                     formspec: 4,
                 })
                 .await
@@ -113,17 +128,28 @@ async fn handle_pkt(
         }
 
         ToCltPkt::Hp { hp, .. } => {
+            info!("HP update: {hp}");
             let _ = event_tx.send(Event::Hp { hp }).await;
             if hp == 0 {
-                info!("HP=0 — sending Respawn");
-                let _ = tx.send(&ToSrvPkt::Respawn).await.map(|_| ());
+                //info!("HP=0 — firing respawn");
+                respawn(tx).await;
+                let _ = event_tx.send(Event::Died).await;
+            }
+        }
+
+        ToCltPkt::ShowFormspec { formname, formspec } => {
+            // Log every formspec so we can see what the server sends on death
+            info!("ShowFormspec: formname={formname:?}");
+            if formname == "builtin:death" {
+                info!("Death formspec — firing respawn");
+                respawn(tx).await;
                 let _ = event_tx.send(Event::Died).await;
             }
         }
 
         ToCltPkt::DeathScreen { .. } => {
-            info!("DeathScreen — sending Respawn");
-            let _ = tx.send(&ToSrvPkt::Respawn).await.map(|_| ());
+            info!("DeathScreen — firing respawn");
+            respawn(tx).await;
             let _ = event_tx.send(Event::Died).await;
         }
 
@@ -149,11 +175,8 @@ async fn handle_pkt(
         }
 
         ToCltPkt::AnnounceMedia { .. } => {
-            info!("AnnounceMedia received — ignoring media completely");
-
-            // Send an empty RequestMedia so the server is happy
+            info!("AnnounceMedia — sending empty RequestMedia");
             let _ = tx.send(&ToSrvPkt::RequestMedia { filenames: vec![] }).await.map(|_| ());
-            info!("Sent empty RequestMedia (ignoring all media)");
         }
 
         ToCltPkt::BlockData { pos, .. } => {
