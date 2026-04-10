@@ -74,7 +74,7 @@ async fn respawn(tx: &CltSender) {
     // Method 2: legacy Respawn packet
     let _ = tx.send(&ToSrvPkt::Respawn).await.map(|_| ());
 
-    info!("Respawning");
+    info!("Sent respawn (InvFields + Respawn)");
 }
 
 async fn handle_pkt(
@@ -128,30 +128,19 @@ async fn handle_pkt(
         }
 
         ToCltPkt::Hp { hp, .. } => {
-            info!("HP update: {hp}");
             let _ = event_tx.send(Event::Hp { hp }).await;
-            if hp == 0 {
-                //info!("HP=0 — firing respawn");
+        }
+
+        ToCltPkt::ShowFormspec { formname, .. } => {
+            info!("ShowFormspec: {formname:?}");
+            if formname == "__builtin:death" {
+                info!("Death formspec — respawning");
                 respawn(tx).await;
                 let _ = event_tx.send(Event::Died).await;
             }
         }
 
-        ToCltPkt::ShowFormspec { formname, formspec } => {
-            // Log every formspec so we can see what the server sends on death
-            info!("ShowFormspec: formname={formname:?}");
-            if formname == "builtin:death" {
-                info!("Death formspec — firing respawn");
-                respawn(tx).await;
-                let _ = event_tx.send(Event::Died).await;
-            }
-        }
-
-        ToCltPkt::DeathScreen { .. } => {
-            info!("DeathScreen — firing respawn");
-            respawn(tx).await;
-            let _ = event_tx.send(Event::Died).await;
-        }
+        ToCltPkt::DeathScreen { .. } => {}
 
         ToCltPkt::UpdatePlayerList { update_type, players } => {
             let _ = event_tx.send(Event::PlayerList { update_type, players }).await;
@@ -181,6 +170,7 @@ async fn handle_pkt(
 
         ToCltPkt::BlockData { pos, .. } => {
             let _ = tx.send(&ToSrvPkt::GotBlocks { blocks: vec![pos] }).await.map(|_| ());
+            let _ = event_tx.send(Event::BlockData { pos }).await;
         }
 
         _ => {}

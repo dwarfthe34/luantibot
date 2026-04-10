@@ -71,6 +71,11 @@ async fn main() -> anyhow::Result<()> {
                         info!("HP: {hp}");
                     }
 
+                    // PATCHED: Added BlockData handler
+                    Some(Event::BlockData { pos }) => {
+                        info!("Received block data at ({}, {}, {})", pos.x, pos.y, pos.z);
+                    }
+
                     Some(Event::Died) => {
                         info!("Died — respawn sent automatically");
                     }

@@ -19,14 +19,15 @@ pub enum Event {
         players:     HashSet<String>,
     },
     TimeOfDay { time: u16, speed: f32 },
-    /// Server-sent movement parameters (walk speed, jump speed, gravity, etc.)
     MovementParams {
         walk_speed:  f32,
         jump_speed:  f32,
         gravity:     f32,
     },
-    /// Server says the player is dead — must send Respawn to come back
     Died,
+    BlockData {
+        pos: Point3<i16>,
+    },
     Kicked(String),
     Disconnected,
 }
