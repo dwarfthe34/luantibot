@@ -5,11 +5,8 @@ Third read the Compile section.
 
 ### Compile
 For compiling use **`cargo build`** (So if you attempt to run this without my fork on mlua in the same directory as the LuantiBot directory, it will fail to compile correctly. I strongly recommend that you make a new folder name it whatever out my fork of mlua in there and the LuantiBot code in there, the entire thing. (the folder structure should look something roughly like this
-**yourFolderNameYouChose
-|   
-+-- LuantiBot   
-|   
-+-- my fork of Mlua**)   
+**yourFolderNameYouChose/mlua**
+and **yourFolderNameYouChose/luantibot**)
 
 ### Running the bot
 For running the bot do **`cargo run -- serverIP:port name password`**
