@@ -9,7 +9,7 @@ For compiling use **`cargo build`** (So if you attempt to run this without my fo
 and **yourFolderNameYouChose/luantibot**, then change your directory into **luantibot** and run **`cargo build`**)
 
 ### Running the bot
-For running the bot do **`cargo run --release --bin lua_bot serverIP:port name password path/to/bot/lua/file`**
+For running the bot do **`cargo run --release --bin lua_bot serverIP:port name password path/to/bot/lua/file`**.
 It is not very simple yet, that is something i have to work on.
 
 ### License
