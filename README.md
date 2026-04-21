@@ -10,6 +10,7 @@ and **yourFolderNameYouChose/luantibot**, then change your directory into **luan
 
 ### Running the bot
 For running the bot do **`cargo run --release --bin lua_bot serverIP:port name password path/to/bot/lua/file`**
+It is not very simple yet, that is something i have to work on.
 
 ### License
 This project in under the GNU General Public License v3.0. For more info see LICENSE.
