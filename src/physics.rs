@@ -78,9 +78,9 @@ impl Physics {
             for x in min_x..=max_x {
                 for z in min_z..=max_z {
                     let key = Point3::new(x as i16, block_y as i16, z as i16);
-
-                    if blocks.contains(&key) {
-                        next.y = (block_y as f32 + 1.0) * BS;
+                    let air = "air";
+                    if !blocks.contains(&key) {
+                        next.y = (block_y as f32 + -0.5) * BS;
                         self.vel.y = 0.0;
                         self.on_ground = true;
                         return next;

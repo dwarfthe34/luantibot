@@ -72,7 +72,7 @@ async fn respawn(tx: &CltSender) {
 
     let _ = tx.send(&ToSrvPkt::Respawn).await.map(|_| ());
 
-    info!("Sent respawn (InvFields + Respawn)");
+    //info!("Respawning");
 }
 
 async fn handle_pkt(
@@ -85,7 +85,7 @@ async fn handle_pkt(
 
     match pkt {
         ToCltPkt::AcceptAuth { .. } => {
-            info!("Auth accepted sending CltReady");
+            info!("Bot ready");
             if let Err(e) = tx
                 .send(&ToSrvPkt::CltReady {
                     major:    5,
@@ -132,7 +132,7 @@ async fn handle_pkt(
         ToCltPkt::ShowFormspec { formname, .. } => {
             info!("ShowFormspec: {formname:?}");
             if formname == "__builtin:death" {
-                info!("Death formspec: respawning");
+                info!("Respawning");
                 respawn(tx).await;
                 let _ = event_tx.send(Event::Died).await;
             }
@@ -162,14 +162,22 @@ async fn handle_pkt(
         }
 
         ToCltPkt::AnnounceMedia { .. } => {
-            info!("AnnounceMedia — sending empty RequestMedia");
+            info!("Ignoring visual(and audio) media.");
             let _ = tx.send(&ToSrvPkt::RequestMedia { filenames: vec![] }).await.map(|_| ());
         }
 
-        ToCltPkt::BlockData { pos, block, .. } => {
-            tx.send(&ToSrvPkt::GotBlocks { blocks: vec![pos] }).await.ok();
-            event_tx.send(Event::BlockData { pos, param0: block }).await.ok();
-        }
+        ToCltPkt::BlockData { pos, block } => {
+                fn mapblock(pos: i16, block: i16) -> i16 {
+                    0
+                }
+                tx.send(&ToSrvPkt::GotBlocks { blocks: vec![pos] }).await.ok();
+                tx
+                    .send(&ToSrvPkt::GotBlocks {
+                        blocks: Vec::from([pos]),
+                    })
+                    .await
+                    .unwrap();
+            }
 
         _ => {}
     }

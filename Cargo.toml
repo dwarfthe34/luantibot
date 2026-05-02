@@ -13,7 +13,7 @@ resolver = "2"
 name = "luanti_bot"
 version = "0.1.0"
 edition = "2021"
-description = "Headless Luanti (Minetest) bot library with Rhai scripting support"
+description = "Headless Luanti (Minetest) bot library with Lua scripting support"
 license = "GPL-3.0"
 
 [lib]

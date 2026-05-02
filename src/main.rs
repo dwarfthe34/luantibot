@@ -71,7 +71,7 @@ async fn main() -> anyhow::Result<()> {
                         info!("HP: {hp}");
                     }
 
-                    Some(Event::BlockData { pos }) => {
+                    Some(Event::BlockData { pos, .. }) => {
                         info!("Received block data at ({}, {}, {})", pos.x, pos.y, pos.z);
                     }
 
