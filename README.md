@@ -24,3 +24,4 @@ This project in under the GNU General Public License v3.0. For more info see LIC
 ~~***`Add a fly feature but only if falling from exactly 65 blocks with exactly 96 ping and the bot's velocity is 250`***)~~
 
 ### I am accepting commits to this project now
+To the public (a.k.a YOU) please fix the gravity some how and create a new release titled "Good release (good gravity)"
