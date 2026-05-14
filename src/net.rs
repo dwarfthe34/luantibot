@@ -167,17 +167,10 @@ async fn handle_pkt(
         }
 
         ToCltPkt::BlockData { pos, block } => {
-                fn mapblock(pos: i16, block: i16) -> i16 {
-                    0
-                }
-                tx.send(&ToSrvPkt::GotBlocks { blocks: vec![pos] }).await.ok();
-                tx
-                    .send(&ToSrvPkt::GotBlocks {
-                        blocks: Vec::from([pos]),
-                    })
-                    .await
-                    .unwrap();
-            }
+            let param0: Vec<u16> = block.param_0.iter().copied().collect();
+            let _ = event_tx.send(Event::BlockData { pos, param0 }).await;
+            tx.send(&ToSrvPkt::GotBlocks { blocks: vec![pos] }).await.ok();
+        }
 
         _ => {}
     }
