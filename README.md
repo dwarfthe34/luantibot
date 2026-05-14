@@ -18,7 +18,9 @@ I give a lot of credit to minetest-rust ( https://github.com/minetest-rust/ ). T
 ### License
 This project in under the GNU General Public License v3.0. For more info see LICENSE.
 
-### I am not accepting commits to this project.
+~~### I am not accepting commits to this project.
 I work on solo projects only, if you want something changed makes a Issue
 and I will get that changed if it makes sense(example of something I would not add:
 ***`Add a fly feature but only if falling from exactly 65 blocks with exactly 96 ping and the bot's velocity is 250`***)
+~~
+### I am accepting commits to this project now
