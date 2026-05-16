@@ -15,6 +15,13 @@ fn is_collidable_node(id: u16) -> bool {
     !matches!(id, 0 | CONTENT_AIR | CONTENT_IGNORE | CONTENT_UNKNOWN)
 }
 
+fn is_collidable_node(id: u16) -> bool {
+    // Some servers encode air as 0 in mapblock param0, while the protocol
+    // also reserves explicit IDs for air/ignore/unknown. Treat all of those as
+    // empty so the bot does not think every air node is solid ground.
+    !matches!(id, 0 | CONTENT_AIR | CONTENT_IGNORE | CONTENT_UNKNOWN)
+}
+
 pub struct Bot {
     tx: CltSender,
     event_rx: tokio::sync::mpsc::Receiver<Event>,
@@ -87,6 +94,8 @@ impl Bot {
             }
 
             Event::BlockData { pos, param0 } => {
+                self.state.loaded_mapblocks.insert(*pos);
+
                 let bx = pos.x as i32 * 16;
                 let by = pos.y as i32 * 16;
                 let bz = pos.z as i32 * 16;
