@@ -12,7 +12,6 @@ pub struct BotState {
     pub respawned: bool,
     pub physics: Physics,
     pub blocks: HashSet<Point3<i16>>,
-    pub loaded_mapblocks: HashSet<Point3<i16>>,
 }
 
 impl Default for BotState {
@@ -26,7 +25,6 @@ impl Default for BotState {
             respawned: false,
             physics: Physics::default(),
             blocks: HashSet::new(),
-            loaded_mapblocks: HashSet::new(),
         }
     }
 }

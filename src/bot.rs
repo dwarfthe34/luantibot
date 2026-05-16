@@ -35,17 +35,11 @@ impl Default for Physics {
     }
 }
 
-fn mapblock_coord(node_coord: i32) -> i16 {
-    node_coord
-        .div_euclid(16)
-        .clamp(i16::MIN as i32, i16::MAX as i32) as i16
-}
-
 fn is_collidable_node(id: u16) -> bool {
-    // Luanti reserves explicit IDs for air/ignore/unknown. Any other content
-    // ID can be a real node (including 0 on some worlds), so keep it solid
-    // until node definitions are tracked well enough to inspect collision_box.
-    !matches!(id, CONTENT_AIR | CONTENT_IGNORE | CONTENT_UNKNOWN)
+    // Some servers encode air as 0 in mapblock param0, while the protocol
+    // also reserves explicit IDs for air/ignore/unknown. Treat all of those as
+    // empty so the bot does not think every air node is solid ground.
+    !matches!(id, 0 | CONTENT_AIR | CONTENT_IGNORE | CONTENT_UNKNOWN)
 }
 
 pub struct Bot {
@@ -154,19 +148,6 @@ impl Bot {
     }
 
     pub async fn physics_step(&mut self, dt: f32) -> Result<(), BotError> {
-        if !self.has_collision_data_near(self.state.pos) {
-            self.state.physics.vel.y = 0.0;
-            return self
-                .send_pos(
-                    self.state.pos,
-                    self.state.physics.vel,
-                    self.state.pitch,
-                    self.state.yaw,
-                    EnumSet::empty(),
-                )
-                .await;
-        }
-
         let new_pos = self
             .state
             .physics
@@ -180,28 +161,6 @@ impl Bot {
 
         self.send_pos(new_pos, vel, pitch, yaw, EnumSet::empty())
             .await
-    }
-
-    fn has_collision_data_near(&self, pos: Point3<f32>) -> bool {
-        let node_x = (pos.x / BS).floor() as i32;
-        let node_y = (pos.y / BS).floor() as i32;
-        let node_z = (pos.z / BS).floor() as i32;
-        let map_x = mapblock_coord(node_x);
-        let map_z = mapblock_coord(node_z);
-
-        // Missing map blocks are not the same thing as air. If we simulate
-        // gravity before the server has sent the block column around the bot,
-        // the empty collision cache makes the bot report positions below the
-        // world forever. Only run gravity after we have map data for the bot's
-        // current column and the block just below its feet.
-        [node_y, node_y - 1]
-            .into_iter()
-            .map(mapblock_coord)
-            .any(|map_y| {
-                self.state
-                    .loaded_mapblocks
-                    .contains(&Point3::new(map_x, map_y, map_z))
-            })
     }
 
     pub fn look(&mut self, yaw: Deg<f32>, pitch: Deg<f32>) {
