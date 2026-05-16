@@ -1,6 +1,9 @@
 use mt_net::{
     enumset::EnumSet,
     CltSender,
+    CONTENT_AIR,
+    CONTENT_IGNORE,
+    CONTENT_UNKNOWN,
     Deg,
     Key,
     PlayerPos,
@@ -47,6 +50,14 @@ impl Default for Physics {
             gravity: GRAVITY,
         }
     }
+}
+
+
+fn is_collidable_node(id: u16) -> bool {
+    // Luanti reserves explicit IDs for air/ignore/unknown. Any other content
+    // ID can be a real node (including 0 on some worlds), so keep it solid
+    // until node definitions are tracked well enough to inspect collision_box.
+    !matches!(id, CONTENT_AIR | CONTENT_IGNORE | CONTENT_UNKNOWN)
 }
 
 pub struct Bot {
@@ -137,10 +148,6 @@ impl Bot {
                 let bz = pos.z as i32 * 16;
 
                 for (i, &id) in param0.iter().enumerate() {
-                    if id == 0 {
-                        continue;
-                    }
-
                     let dx = (i % 16) as i32;
                     let dy = (i / 16 % 16) as i32;
                     let dz = (i / 256) as i32;
@@ -157,9 +164,13 @@ impl Bot {
                         .clamp(i16::MIN as i32, i16::MAX as i32)
                         as i16;
 
-                    self.state
-                        .blocks
-                        .insert(Point3::new(nx, ny, nz));
+                    let node_pos = Point3::new(nx, ny, nz);
+
+                    if is_collidable_node(id) {
+                        self.state.blocks.insert(node_pos);
+                    } else {
+                        self.state.blocks.remove(&node_pos);
+                    }
                 }
             }
 
