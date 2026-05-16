@@ -6,25 +6,25 @@ pub const GRAVITY: f32 = 9.81 * BS;
 
 #[derive(Debug, Clone)]
 pub struct Physics {
-    pub vel:        Vector3<f32>,
-    pub on_ground:  bool,
-    pub want_jump:  bool,
-    pub wish_dir:   Vector3<f32>,
+    pub vel: Vector3<f32>,
+    pub on_ground: bool,
+    pub want_jump: bool,
+    pub wish_dir: Vector3<f32>,
     pub walk_speed: f32,
     pub jump_speed: f32,
-    pub gravity:    f32,
+    pub gravity: f32,
 }
 
 impl Default for Physics {
     fn default() -> Self {
         Self {
-            vel:        Vector3::new(0.0, 0.0, 0.0),
-            on_ground:  false,
-            want_jump:  false,
-            wish_dir:   Vector3::new(0.0, 0.0, 0.0),
+            vel: Vector3::new(0.0, 0.0, 0.0),
+            on_ground: false,
+            want_jump: false,
+            wish_dir: Vector3::new(0.0, 0.0, 0.0),
             walk_speed: 4.0 * BS,
             jump_speed: 6.5 * BS,
-            gravity:    GRAVITY,
+            gravity: GRAVITY,
         }
     }
 }
@@ -78,16 +78,20 @@ impl Physics {
         let min_z = ((next.z - half_size) / BS).floor() as i32;
         let max_z = ((next.z + half_size) / BS).floor() as i32;
 
-        // --- Vertical collision (falling) ---
+        // --- Vertical collision (falling / ground probing) ---
         // In Minetest, node at integer block_y has its center at block_y*BS,
         // so its top surface is at (block_y + 0.5) * BS.
         //
         // We sweep from the lowest block the player could reach (next.y)
         // up to where they started (pos.y), checking each block layer.
-        // This prevents tunneling at high fall speeds.
+        // This prevents tunneling at high fall speeds. We also run this while
+        // vel.y == 0.0 so a bot that was on_ground last tick verifies there is
+        // still support underneath instead of remaining stuck in a stale
+        // on_ground state after walking off an edge.
         if self.vel.y <= 0.0 {
             let check_from = (next.y / BS).floor() as i32;
-            let check_to   = (pos.y  / BS).floor() as i32;
+            let check_to = (pos.y / BS).floor() as i32;
+            let mut landed = false;
 
             // Iterate from highest to lowest so we land on the topmost block
             'outer: for by in (check_from..=check_to).rev() {
@@ -105,14 +109,17 @@ impl Physics {
                             next.y = top;
                             self.vel.y = 0.0;
                             self.on_ground = true;
+                            landed = true;
                             break 'outer;
                         }
                     }
                 }
             }
 
-            // If no block found below, we're in the air
-            if self.vel.y < 0.0 {
+            // If no supporting block was found, we're in the air. This must be
+            // true even when vel.y was exactly zero; otherwise gravity never
+            // starts after the bot leaves solid ground.
+            if !landed {
                 self.on_ground = false;
             }
         }
@@ -153,10 +160,18 @@ impl Physics {
         let mut dx = 0.0f32;
         let mut dz = 0.0f32;
 
-        if forward { dz -= 1.0; }
-        if back    { dz += 1.0; }
-        if left    { dx -= 1.0; }
-        if right   { dx += 1.0; }
+        if forward {
+            dz -= 1.0;
+        }
+        if back {
+            dz += 1.0;
+        }
+        if left {
+            dx -= 1.0;
+        }
+        if right {
+            dx += 1.0;
+        }
 
         if dx == 0.0 && dz == 0.0 {
             self.wish_dir = Vector3::new(0.0, 0.0, 0.0);
@@ -174,6 +189,54 @@ impl Physics {
     pub fn apply_movement_params(&mut self, walk_speed: f32, jump_speed: f32, gravity: f32) {
         self.walk_speed = walk_speed * BS;
         self.jump_speed = jump_speed * BS;
-        self.gravity    = gravity * BS;
+        self.gravity = gravity * BS;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn blocks(points: &[(i16, i16, i16)]) -> HashSet<Point3<i16>> {
+        points
+            .iter()
+            .map(|&(x, y, z)| Point3::new(x, y, z))
+            .collect()
+    }
+
+    #[test]
+    fn lands_on_ground_without_sinking_through() {
+        let mut physics = Physics::default();
+        let ground = blocks(&[(0, 0, 0)]);
+        let next = physics.step(Point3::new(0.0, 20.0, 0.0), 1.0, &ground);
+
+        assert_eq!(next.y, 0.5 * BS);
+        assert_eq!(physics.vel.y, 0.0);
+        assert!(physics.on_ground);
+    }
+
+    #[test]
+    fn falling_collision_sweeps_past_high_velocity() {
+        let mut physics = Physics::default();
+        physics.vel.y = -300.0;
+        let ground = blocks(&[(0, 0, 0)]);
+        let next = physics.step(Point3::new(0.0, 80.0, 0.0), 0.5, &ground);
+
+        assert_eq!(next.y, 0.5 * BS);
+        assert_eq!(physics.vel.y, 0.0);
+        assert!(physics.on_ground);
+    }
+
+    #[test]
+    fn loses_on_ground_when_support_disappears() {
+        let mut physics = Physics {
+            on_ground: true,
+            ..Physics::default()
+        };
+
+        let next = physics.step(Point3::new(0.0, 0.5 * BS, 0.0), 0.05, &HashSet::new());
+
+        assert_eq!(next.y, 0.5 * BS);
+        assert!(!physics.on_ground);
     }
 }
