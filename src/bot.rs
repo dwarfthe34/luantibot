@@ -114,6 +114,8 @@ impl Bot {
             }
 
             Event::BlockData { pos, param0 } => {
+                self.state.loaded_mapblocks.insert(*pos);
+
                 let bx = pos.x as i32 * 16;
                 let by = pos.y as i32 * 16;
                 let bz = pos.z as i32 * 16;
