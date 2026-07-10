@@ -25,14 +25,14 @@ pub enum AuthMethod {
     FirstSrp,
 }
 
-#[mt_derive(to = "clt", repr = "u64", enumset)]
+#[mt_derive(to = "clt", repr = "u32", enumset)]
 pub enum CsmRestrictionFlag {
-    NoCsms,
-    NoChatMsgs,
-    NoItemDefs,
-    NoNodeDefs,
-    LimitMapRange,
-    NoPlayerList,
+    LoadClientMods,
+    ChatMessages,
+    ReadItemDefs,
+    ReadNodeDefs,
+    LookupNodes,
+    ReadPlayerInfo,
 }
 
 #[mt_derive(to = "clt", repr = "u8")]
@@ -84,10 +84,7 @@ pub enum ToCltPkt {
         send_interval: f32,
         sudo_auth_methods: EnumSet<AuthMethod>,
     } = 3,
-    AcceptSudoMode {
-        #[mt(const_after = "[0u8; 15]")]
-        sudo_auth_methods: EnumSet<AuthMethod>,
-    } = 4,
+    AcceptSudoMode = 4,
     DenySudoMode = 5,
     Kick(KickReason) = 10,
     BlockData {
@@ -115,10 +112,8 @@ pub enum ToCltPkt {
     } = 41,
     CsmRestrictionFlags {
         flags: EnumSet<CsmRestrictionFlag>,
-        map_range: u32,
     } = 42,
     AddPlayerVelocity {
-        #[mt(multiplier = "BS")]
         vel: Vector3<f32>,
     } = 43,
     MediaPush {
@@ -145,9 +140,7 @@ pub enum ToCltPkt {
         msgs: Vec<ObjIdMsg>,
     } = 50,
     Hp {
-        hp: u16,
-        #[mt(default)]
-        damage_effect: bool,
+        hp: u8,
     } = 51,
     MovePlayer {
         #[mt(multiplier = "BS")]
@@ -188,7 +181,7 @@ pub enum ToCltPkt {
         aliases: HashMap<String, String>,
     } = 61,
     PlaySound {
-        id: u32,
+        id: i32,
         name: String,
         gain: f32,
         source: SoundSource,
@@ -200,9 +193,10 @@ pub enum ToCltPkt {
         fade: f32,
         pitch: f32,
         ephermeral: bool,
+        start_time: f32,
     } = 63,
     StopSound {
-        id: u32,
+        id: i32,
     } = 64,
     Privs {
         privs: HashSet<String>,
@@ -224,17 +218,53 @@ pub enum ToCltPkt {
         formname: String,
     } = 68,
     Movement {
+        #[mt(multiplier = "1000.0_f32")]
+        #[mt(map_ser = "|x: &f32| Ok(*x as i32)")]
+        #[mt(map_des = "|x: i32| Ok(x as f32)")]
         default_accel: f32,
+        #[mt(multiplier = "1000.0_f32")]
+        #[mt(map_ser = "|x: &f32| Ok(*x as i32)")]
+        #[mt(map_des = "|x: i32| Ok(x as f32)")]
         air_accel: f32,
+        #[mt(multiplier = "1000.0_f32")]
+        #[mt(map_ser = "|x: &f32| Ok(*x as i32)")]
+        #[mt(map_des = "|x: i32| Ok(x as f32)")]
         fast_accel: f32,
+        #[mt(multiplier = "1000.0_f32")]
+        #[mt(map_ser = "|x: &f32| Ok(*x as i32)")]
+        #[mt(map_des = "|x: i32| Ok(x as f32)")]
         walk_speed: f32,
+        #[mt(multiplier = "1000.0_f32")]
+        #[mt(map_ser = "|x: &f32| Ok(*x as i32)")]
+        #[mt(map_des = "|x: i32| Ok(x as f32)")]
         crouch_speed: f32,
+        #[mt(multiplier = "1000.0_f32")]
+        #[mt(map_ser = "|x: &f32| Ok(*x as i32)")]
+        #[mt(map_des = "|x: i32| Ok(x as f32)")]
         fast_speed: f32,
+        #[mt(multiplier = "1000.0_f32")]
+        #[mt(map_ser = "|x: &f32| Ok(*x as i32)")]
+        #[mt(map_des = "|x: i32| Ok(x as f32)")]
         climb_speed: f32,
+        #[mt(multiplier = "1000.0_f32")]
+        #[mt(map_ser = "|x: &f32| Ok(*x as i32)")]
+        #[mt(map_des = "|x: i32| Ok(x as f32)")]
         jump_speed: f32,
+        #[mt(multiplier = "1000.0_f32")]
+        #[mt(map_ser = "|x: &f32| Ok(*x as i32)")]
+        #[mt(map_des = "|x: i32| Ok(x as f32)")]
         fluidity: f32,
+        #[mt(multiplier = "1000.0_f32")]
+        #[mt(map_ser = "|x: &f32| Ok(*x as i32)")]
+        #[mt(map_des = "|x: i32| Ok(x as f32)")]
         smoothing: f32,
+        #[mt(multiplier = "1000.0_f32")]
+        #[mt(map_ser = "|x: &f32| Ok(*x as i32)")]
+        #[mt(map_des = "|x: i32| Ok(x as f32)")]
         sink: f32,
+        #[mt(multiplier = "1000.0_f32")]
+        #[mt(map_ser = "|x: &f32| Ok(*x as i32)")]
+        #[mt(map_des = "|x: i32| Ok(x as f32)")]
         gravity: f32,
     } = 69,
     SpawnParticle {
@@ -315,13 +345,15 @@ pub enum ToCltPkt {
         first: Vector3<f32>,
         #[mt(multiplier = "BS")]
         third: Vector3<f32>,
+        #[mt(multiplier = "BS")]
+        third_front: Vector3<f32>,
     } = 82,
     RemoveParticleSpawner {
         id: u32,
     } = 83,
     CloudParams(CloudParams) = 84,
     FadeSound {
-        id: u32,
+        id: i32,
         step: f32,
         gain: f32,
     } = 85,

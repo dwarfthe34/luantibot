@@ -28,9 +28,7 @@ path = "src/main.rs"
 name = "lua_bot"
 path = "src/lua_bot.rs"
 
-[[example]]
-name = "simple_bot"
-path = "examples/simple_bot.rs"
+
 
 [dependencies]
 # REPLACEMENT: Pure Rust scripting engine (No C deps, Stable Rust)

@@ -3,17 +3,7 @@ use mt_net::{
     CONTENT_AIR, CONTENT_IGNORE, CONTENT_UNKNOWN,
 };
 
-use crate::{config::Config, error::BotError, event::Event, net, state::BotState};
-
-pub const BS: f32 = 10.0;
-pub const GRAVITY: f32 = 9.81 * BS;
-
-fn is_collidable_node(id: u16) -> bool {
-    // Some servers encode air as 0 in mapblock param0, while the protocol
-    // also reserves explicit IDs for air/ignore/unknown. Treat all of those as
-    // empty so the bot does not think every air node is solid ground.
-    !matches!(id, 0 | CONTENT_AIR | CONTENT_IGNORE | CONTENT_UNKNOWN)
-}
+use crate::{config::Config, error::BotError, event::Event, net, physics::BS, state::BotState};
 
 fn is_collidable_node(id: u16) -> bool {
     // Some servers encode air as 0 in mapblock param0, while the protocol
@@ -73,14 +63,19 @@ impl Bot {
                 self.state.pitch = *pitch;
                 self.state.yaw = *yaw;
 
+                // Only reset vertical velocity when the server teleports us
+                // upward (e.g. after respawn), not on every position sync.
+                // An unconditional reset would kill gravity accumulation.
                 if pos.y > old_y + BS {
                     self.state.physics.vel.y = 0.0;
                     self.state.physics.on_ground = false;
                 }
+
+                self.state.initial_pos_received = true;
             }
 
             Event::Hp { hp } => {
-                self.state.hp = *hp;
+                self.state.hp = *hp as u16;
             }
 
             Event::MovementParams {
@@ -128,6 +123,10 @@ impl Bot {
     }
 
     pub async fn physics_step(&mut self, dt: f32) -> Result<(), BotError> {
+        if !self.state.initial_pos_received {
+            return Ok(());
+        }
+
         let new_pos = self
             .state
             .physics
@@ -180,6 +179,13 @@ impl Bot {
         yaw: Deg<f32>,
         keys: EnumSet<Key>,
     ) -> Result<(), BotError> {
+        // Round to centi-unit precision so the multiplier (1000.0) inside
+        // PlayerPos serialization produces exact integers.  Without this,
+        // f32 imprecision from gravity/dt arithmetic (e.g. 0.05 not being
+        // exactly representable) makes the cast to i32 fail.
+        let pos = pos.map(|c| (c * 1000.0).round() / 1000.0);
+        let vel = vel.map(|c| (c * 1000.0).round() / 1000.0);
+
         self.tx
             .send(&ToSrvPkt::PlayerPos(PlayerPos {
                 pos,
@@ -189,6 +195,9 @@ impl Bot {
                 keys,
                 fov: Rad(std::f32::consts::FRAC_PI_2),
                 wanted_range: 12,
+                camera_inverted: false,
+                movement_speed: 0.0,
+                movement_direction: 0.0,
             }))
             .await
             .map(|_| ())

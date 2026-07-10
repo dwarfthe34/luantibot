@@ -10,8 +10,11 @@ pub struct BotState {
     pub hp: u16,
     pub joined: bool,
     pub respawned: bool,
+    pub initial_pos_received: bool,
     pub physics: Physics,
     pub blocks: HashSet<Point3<i16>>,
+    pub loaded_mapblocks: HashSet<Point3<i16>>,
+    pub pending_money: bool,
 }
 
 impl Default for BotState {
@@ -23,8 +26,11 @@ impl Default for BotState {
             hp: 20,
             joined: false,
             respawned: false,
+            initial_pos_received: false,
             physics: Physics::default(),
             blocks: HashSet::new(),
+            loaded_mapblocks: HashSet::new(),
+            pending_money: false,
         }
     }
 }

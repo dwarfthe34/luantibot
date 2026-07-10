@@ -16,12 +16,12 @@ pub enum Key {
 
 #[cfg(feature = "client")]
 fn ser_cast_err() -> mt_ser::SerializeError {
-    mt_ser::SerializeError::Other("cast failed".into())
+    mt_ser::SerializeError::Other("cast failed (client side)".into())
 }
 
 #[cfg(feature = "server")]
 fn des_cast_err() -> mt_ser::DeserializeError {
-    mt_ser::DeserializeError::Other("cast failed".into())
+    mt_ser::DeserializeError::Other("cast failed (server side)".into())
 }
 
 #[mt_derive(to = "srv")]
@@ -45,6 +45,9 @@ pub struct PlayerPos {
     #[mt(map_ser = "|x| Ok(x.0 as u8)", map_des = "|x: u8| Ok(Rad(x as f32))")]
     pub fov: Rad<f32>,
     pub wanted_range: u8,
+    pub camera_inverted: bool,
+    pub movement_speed: f32,
+    pub movement_direction: f32,
 }
 
 #[mt_derive(to = "srv", repr = "u8")]

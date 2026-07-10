@@ -109,12 +109,36 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+fn strip_minetest_escapes(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        if c == '\x1b' {
+            for c in chars.by_ref() {
+                if c == ')' {
+                    break;
+                }
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
 async fn handle_chat(bot: &mut Bot, sender: &str, text: &str) -> anyhow::Result<()> {
     if sender == bot.username() {
         return Ok(());
     }
 
-    match text.trim() {
+    if sender != "dwarfthe3" && !text.contains("dwarfthe3") {
+        return Ok(());
+    }
+
+    let cleaned = strip_minetest_escapes(text);
+    let cmd = cleaned.split_whitespace().find(|w| w.starts_with('!')).unwrap_or("");
+
+    match cmd {
         "!pos" => {
             let p = bot.state.pos;
             bot.send_chat(format!("({:.1}, {:.1}, {:.1})", p.x, p.y, p.z)).await?;
@@ -137,8 +161,11 @@ async fn handle_chat(bot: &mut Bot, sender: &str, text: &str) -> anyhow::Result<
             bot.send_chat("Stopped").await?;
         }
         "!quit" => {
-            bot.send_chat("Goodbye!").await?;
+            bot.send_chat("Goodbye!");
             bot.disconnect().await?;
+        }
+        "!ca" => {
+            bot.send_chat("/clanaccept DWRF").await?;
         }
         _ => {}
     }

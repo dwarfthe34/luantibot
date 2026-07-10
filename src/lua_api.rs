@@ -52,7 +52,7 @@ impl LuaBotAPI {
                 self.trigger_lua_callback(&event, lua).await?;
             }
 
-            if bot.state.joined {
+            if bot.state.joined && !bot.state.loaded_mapblocks.is_empty() {
                 if let Err(e) = bot.physics_step(0.05).await {
                     tracing::info!("physics_step error: {e}");
                 }

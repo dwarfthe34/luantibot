@@ -13,7 +13,7 @@ pub enum Event {
         pitch: Deg<f32>,
         yaw:   Deg<f32>,
     },
-    Hp { hp: u16 },
+    Hp { hp: u8 },
     PlayerList {
         update_type: PlayerListUpdateType,
         players:     HashSet<String>,

@@ -2,7 +2,6 @@ use mt_net::{Deg, Point3, Vector3};
 use std::collections::HashSet;
 
 pub const BS: f32 = 10.0;
-pub const GRAVITY: f32 = 9.81 * BS;
 
 #[derive(Debug, Clone)]
 pub struct Physics {
@@ -12,7 +11,7 @@ pub struct Physics {
     pub wish_dir: Vector3<f32>,
     pub walk_speed: f32,
     pub jump_speed: f32,
-    pub gravity: f32,
+    pub gravity_accel: f32,
 }
 
 impl Default for Physics {
@@ -24,7 +23,7 @@ impl Default for Physics {
             wish_dir: Vector3::new(0.0, 0.0, 0.0),
             walk_speed: 4.0 * BS,
             jump_speed: 6.5 * BS,
-            gravity: GRAVITY,
+            gravity_accel: 10.0 * BS, // Default gravity acceleration
         }
     }
 }
@@ -36,13 +35,27 @@ impl Physics {
         dt: f32,
         blocks: &HashSet<Point3<i16>>,
     ) -> Point3<f32> {
-        // Horizontal movement
+        // Horizontal movement (applied even without terrain data)
         if self.wish_dir.x != 0.0 || self.wish_dir.z != 0.0 {
             self.vel.x = self.wish_dir.x * self.walk_speed;
             self.vel.z = self.wish_dir.z * self.walk_speed;
         } else {
             self.vel.x = 0.0;
             self.vel.z = 0.0;
+        }
+
+        // Without terrain data the collision check can never find ground,
+        // so the bot would accelerate to terminal velocity and fall through
+        // the world.  Skip vertical movement until blocks arrive.
+        if blocks.is_empty() {
+            self.vel.y = 0.0;
+            self.on_ground = false;
+            let mut next = pos + self.vel * dt;
+            let max_coord = (i32::MAX as f32) / (100.0 * BS) - 1.0;
+            next.x = next.x.clamp(-max_coord, max_coord);
+            next.y = next.y.clamp(-max_coord, max_coord);
+            next.z = next.z.clamp(-max_coord, max_coord);
+            return next;
         }
 
         // Jump
@@ -52,15 +65,9 @@ impl Physics {
         }
         self.want_jump = false;
 
-        // Apply gravity only when not on ground
+        // Apply gravity if airborne
         if !self.on_ground {
-            self.vel.y -= self.gravity * dt;
-        }
-
-        // Terminal velocity
-        let terminal = -180.0 * BS;
-        if self.vel.y < terminal {
-            self.vel.y = terminal;
+            self.vel.y -= self.gravity_accel * dt;
         }
 
         let mut next = pos + self.vel * dt;
@@ -72,11 +79,13 @@ impl Physics {
         next.z = next.z.clamp(-max_coord, max_coord);
 
         // Horizontal AABB extents
+        // Node at integer position p occupies [p*BS - BS/2, p*BS + BS/2],
+        // so the node containing world coordinate w is floor(w/BS + 0.5).
         let half_size = 0.3 * BS;
-        let min_x = ((next.x - half_size) / BS).floor() as i32;
-        let max_x = ((next.x + half_size) / BS).floor() as i32;
-        let min_z = ((next.z - half_size) / BS).floor() as i32;
-        let max_z = ((next.z + half_size) / BS).floor() as i32;
+        let min_x = ((next.x - half_size + 0.5 * BS) / BS).floor() as i32;
+        let max_x = ((next.x + half_size + 0.5 * BS) / BS).floor() as i32;
+        let min_z = ((next.z - half_size + 0.5 * BS) / BS).floor() as i32;
+        let max_z = ((next.z + half_size + 0.5 * BS) / BS).floor() as i32;
 
         // --- Vertical collision (falling / ground probing) ---
         // In Minetest, node at integer block_y has its center at block_y*BS,
@@ -89,8 +98,15 @@ impl Physics {
         // still support underneath instead of remaining stuck in a stale
         // on_ground state after walking off an edge.
         if self.vel.y <= 0.0 {
+            // The falling sweep checks blocks whose top surface the feet could
+            // contact.  floor(pos_y/BS) gives the block just below the feet
+            // (whose top is at or below pos_y).  We also include the block
+            // *containing* pos.y (floor((pos.y + BS/2)/BS)) in case the head
+            // collision pushed the player inside a block — without that extra
+            // layer the sweep would miss the block the player is inside and
+            // never snap them back onto its top surface.
             let check_from = (next.y / BS).floor() as i32;
-            let check_to = (pos.y / BS).floor() as i32;
+            let check_to = ((pos.y + 0.5 * BS) / BS).floor() as i32;
             let mut landed = false;
 
             // Iterate from highest to lowest so we land on the topmost block
@@ -124,12 +140,15 @@ impl Physics {
             }
         }
 
-        // --- Vertical collision (rising) ---
-        // Prevent clipping into a ceiling when jumping
-        if self.vel.y > 0.0 {
+        // --- Vertical collision (head / ceiling) ---
+        // Prevent clipping into a ceiling when jumping, and separate the
+        // player when the server places them with their head inside a block
+        // (e.g. spawning inside a slab).  Always runs so the head cannot
+        // remain stuck in a collidable node regardless of velocity direction.
+        {
             // Player is ~1.75 blocks tall; check head position
             let head_y = next.y + 1.75 * BS;
-            let by = (head_y / BS).floor() as i32;
+            let by = ((head_y + 0.5 * BS) / BS).floor() as i32;
             let ceil_bottom = (by as f32 - 0.5) * BS; // bottom of block above
 
             if head_y >= ceil_bottom {
@@ -186,10 +205,10 @@ impl Physics {
         self.wish_dir = Vector3::new(wx / len, 0.0, wz / len);
     }
 
-    pub fn apply_movement_params(&mut self, walk_speed: f32, jump_speed: f32, gravity: f32) {
+    pub fn apply_movement_params(&mut self, walk_speed: f32, jump_speed: f32, _gravity: f32) {
         self.walk_speed = walk_speed * BS;
         self.jump_speed = jump_speed * BS;
-        self.gravity = gravity * BS;
+        self.gravity_accel = _gravity * BS;
     }
 }
 
@@ -205,18 +224,15 @@ mod tests {
     }
 
     #[test]
-    fn lands_on_ground_without_sinking_through() {
+    fn stays_at_same_y_without_gravity() {
         let mut physics = Physics::default();
-        let ground = blocks(&[(0, 0, 0)]);
-        let next = physics.step(Point3::new(0.0, 20.0, 0.0), 1.0, &ground);
-
-        assert_eq!(next.y, 0.5 * BS);
+        let next = physics.step(Point3::new(0.0, 50.0, 0.0), 1.0, &HashSet::new());
+        assert_eq!(next.y, 50.0);
         assert_eq!(physics.vel.y, 0.0);
-        assert!(physics.on_ground);
     }
 
     #[test]
-    fn falling_collision_sweeps_past_high_velocity() {
+    fn collision_stops_vertical_movement() {
         let mut physics = Physics::default();
         physics.vel.y = -300.0;
         let ground = blocks(&[(0, 0, 0)]);
@@ -225,6 +241,19 @@ mod tests {
         assert_eq!(next.y, 0.5 * BS);
         assert_eq!(physics.vel.y, 0.0);
         assert!(physics.on_ground);
+    }
+
+    #[test]
+    fn head_in_slab_pushes_player_down() {
+        let mut physics = Physics::default();
+        // Slab at block y=4 (AABB 35–45).  Player head at 43.5 is inside the
+        // slab, feet at 26.0 are in the air with no ground below.
+        let slab = blocks(&[(0, 4, 0)]);
+        let next = physics.step(Point3::new(0.0, 26.0, 0.0), 0.05, &slab);
+
+        // Head is pushed down to the slab's bottom (y=35) → feet at 17.5.
+        assert_eq!(next.y, 17.5);
+        assert_eq!(physics.vel.y, 0.0);
     }
 
     #[test]
